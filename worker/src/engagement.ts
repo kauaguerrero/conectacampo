@@ -27,7 +27,11 @@ async function findGroupId(whatsappGroupId: string): Promise<string | null> {
   return data?.id ?? null;
 }
 
-async function findMemberId(groupId: string, senderJid: string): Promise<string | null> {
+// Acha o membro pelo telefone; se ninguém bater, cadastra na hora (com o
+// pushName do WhatsApp quando disponível, senão um placeholder com o
+// telefone) — sem isso, quem reage/responde sem estar cadastrado nunca
+// entrava na contagem de membros ativos nem aparecia com nome nos KPIs.
+async function findOrCreateMemberId(groupId: string, senderJid: string, pushName?: string | null): Promise<string | null> {
   const digits = jidToDigits(senderJid);
   if (!digits) {
     return null;
@@ -47,7 +51,38 @@ async function findMemberId(groupId: string, senderJid: string): Promise<string 
     return memberDigits.length > 0 && (memberDigits === digits || digits.endsWith(memberDigits) || memberDigits.endsWith(digits));
   });
 
-  return match?.id ?? null;
+  if (match) {
+    return match.id;
+  }
+
+  const name = pushName?.trim() || `Novo membro (${digits})`;
+
+  const { data: created, error: insertError } = await supabase
+    .from("members")
+    .insert({ group_id: groupId, name, phone: digits })
+    .select("id")
+    .single();
+
+  if (insertError) {
+    // Duas mensagens quase simultâneas da mesma pessoa nova podem colidir no
+    // insert (constraint members_group_id_phone_key) — nesse caso o membro
+    // já foi criado pela outra chamada, só reaproveita.
+    if (insertError.code === "23505") {
+      const { data: existing } = await supabase
+        .from("members")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("phone", digits)
+        .maybeSingle();
+      return existing?.id ?? null;
+    }
+
+    logger.error({ error: insertError, groupId, digits }, "Falha ao auto-cadastrar membro a partir de evento de engajamento.");
+    return null;
+  }
+
+  logger.info({ groupId, memberId: created?.id, name }, "Membro auto-cadastrado a partir de evento de engajamento.");
+  return created?.id ?? null;
 }
 
 async function findLatestSendQueueId(groupId: string): Promise<string | null> {
@@ -73,8 +108,9 @@ async function recordEvent(params: {
   senderJid: string;
   type: "reply" | "reaction";
   content: string;
+  pushName?: string | null;
 }): Promise<void> {
-  const { whatsappGroupId, senderJid, type, content } = params;
+  const { whatsappGroupId, senderJid, type, content, pushName } = params;
 
   const groupId = await findGroupId(whatsappGroupId);
   if (!groupId) {
@@ -84,7 +120,7 @@ async function recordEvent(params: {
   }
 
   const [memberId, sendQueueId] = await Promise.all([
-    findMemberId(groupId, senderJid),
+    findOrCreateMemberId(groupId, senderJid, pushName),
     findLatestSendQueueId(groupId),
   ]);
 
@@ -109,15 +145,16 @@ async function recordPollVote(params: {
   senderJid: string;
   sendQueueId: string;
   selectedOptions: string[];
+  pushName?: string | null;
 }): Promise<void> {
-  const { whatsappGroupId, senderJid, sendQueueId, selectedOptions } = params;
+  const { whatsappGroupId, senderJid, sendQueueId, selectedOptions, pushName } = params;
 
   const groupId = await findGroupId(whatsappGroupId);
   if (!groupId) {
     return;
   }
 
-  const memberId = await findMemberId(groupId, senderJid);
+  const memberId = await findOrCreateMemberId(groupId, senderJid, pushName);
 
   const { error } = await supabase.from("engagement_events").insert({
     group_id: groupId,
@@ -177,6 +214,7 @@ export function registerEngagementListeners(sock: WASocket): void {
               senderJid,
               sendQueueId: vote.sendQueueId,
               selectedOptions: vote.selectedOptions,
+              pushName: msg.pushName,
             });
           }
         })();
@@ -190,7 +228,7 @@ export function registerEngagementListeners(sock: WASocket): void {
         continue;
       }
 
-      void recordEvent({ whatsappGroupId: jid, senderJid, type: "reply", content: text });
+      void recordEvent({ whatsappGroupId: jid, senderJid, type: "reply", content: text, pushName: msg.pushName });
     }
   });
 
