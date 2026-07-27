@@ -22,6 +22,7 @@ export function WhatsAppConnectionCard({ initialStatus }: { initialStatus: Whats
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -41,6 +42,15 @@ export function WhatsAppConnectionCard({ initialStatus }: { initialStatus: Whats
     const fresh = await getWhatsAppStatus();
     setStatus(fresh);
     setIsConnecting(false);
+  }
+
+  async function handleCancel() {
+    setIsCancelling(true);
+    const result = await logoutWhatsApp();
+    if (result.error) toast.error(result.error);
+    const fresh = await getWhatsAppStatus();
+    setStatus(fresh);
+    setIsCancelling(false);
   }
 
   async function handleLogout() {
@@ -114,6 +124,9 @@ export function WhatsAppConnectionCard({ initialStatus }: { initialStatus: Whats
               Abra o WhatsApp no celular → <span className="font-medium text-foreground">Aparelhos conectados</span>{" "}
               → <span className="font-medium text-foreground">Conectar um aparelho</span>, e escaneie o código.
             </p>
+            <Button variant="outline" size="sm" onClick={handleCancel} disabled={isCancelling}>
+              {isCancelling ? "Cancelando..." : "Cancelar conexão"}
+            </Button>
           </div>
         ) : isPreparingQr ? (
           <div className="flex flex-col items-center gap-3 rounded-xl bg-muted/60 p-4 text-center">

@@ -55,6 +55,11 @@ export function getSocket(): WASocket | undefined {
 // os eventos que a gente realmente quer ver (conectado, QR, erro).
 const baileysLogger = pino({ level: "warn" });
 
+async function clearAuthState(): Promise<void> {
+  await fs.rm(config.authStatePath, { recursive: true, force: true });
+  await fs.mkdir(config.authStatePath, { recursive: true });
+}
+
 async function connect(): Promise<void> {
   awaitingManualConnect = false;
   connectionState.status = "connecting";
@@ -122,6 +127,13 @@ async function connect(): Promise<void> {
 
       if (loggedOut) {
         connectionState.status = "logged_out";
+        // Sessão inválida (ex.: aparelho removido em "Aparelhos conectados"
+        // no celular) — apaga a credencial salva na hora, senão a próxima
+        // tentativa de conexão reusa esse mesmo creds.json e leva outro 401
+        // sem nunca chegar a gerar um QR novo.
+        void clearAuthState().catch((err) =>
+          logger.error({ err }, "Falha ao limpar sessão do WhatsApp após logout forçado."),
+        );
         return;
       }
 
@@ -171,8 +183,7 @@ export async function logoutAndClearSession(): Promise<void> {
   connectionState.qr = null;
   connectionState.qrImage = null;
 
-  await fs.rm(config.authStatePath, { recursive: true, force: true });
-  await fs.mkdir(config.authStatePath, { recursive: true });
+  await clearAuthState();
 
   logger.info("Sessão do WhatsApp deslogada e apagada.");
 }
