@@ -27,4 +27,8 @@ export const config = {
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-flash-lite-latest",
   cronTimezone: process.env.CRON_TIMEZONE ?? "America/Sao_Paulo",
+
+  // Opcional: sem essa chave, temas/gerações "de busca" caem de volta no
+  // comportamento sem notícia (ver news.ts). Conta free da newsapi.org.
+  newsApiKey: process.env.NEWS_API_KEY,
 };

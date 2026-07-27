@@ -1,4 +1,5 @@
-import { Lightbulb, Plus } from "lucide-react";
+import { Lightbulb, Plus, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
@@ -13,6 +14,7 @@ interface TopicRow {
   description: string | null;
   priority: boolean;
   last_used_at: string | null;
+  is_search: boolean;
 }
 
 export default async function TemasPage() {
@@ -20,7 +22,7 @@ export default async function TemasPage() {
 
   const { data: topics, error } = await supabase
     .from("topics")
-    .select("id, title, description, priority, last_used_at")
+    .select("id, title, description, priority, last_used_at, is_search")
     .order("priority", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -56,10 +58,13 @@ export default async function TemasPage() {
                     : "bg-muted text-muted-foreground"
                 }`}
               >
-                <Lightbulb className="size-4.5" />
+                {topic.is_search ? <Search className="size-4.5" /> : <Lightbulb className="size-4.5" />}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold">{topic.title}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold">{topic.title}</p>
+                  {topic.is_search ? <Badge variant="outline">Busca</Badge> : null}
+                </div>
                 <p className="truncate text-sm text-muted-foreground">
                   {topic.description ?? "Sem detalhes"} ·{" "}
                   {topic.last_used_at
@@ -71,7 +76,7 @@ export default async function TemasPage() {
                 <PriorityToggle id={topic.id} priority={topic.priority} />
                 <TopicDialog
                   mode="edit"
-                  topic={topic}
+                  topic={{ ...topic, isSearch: topic.is_search }}
                   trigger={
                     <Button variant="outline" size="sm">
                       Editar

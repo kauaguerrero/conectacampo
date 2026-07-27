@@ -2,12 +2,20 @@ import { logger } from "../logger.js";
 import { supabase } from "../supabase.js";
 import { generateText } from "./client.js";
 import { EQUIPMENT_CONTEXT } from "./equipment-context.js";
+import { fetchAgroNews, type NewsArticle } from "./news.js";
 import { markTopicUsed, selectTopic, type Topic } from "./topics.js";
 
 export type GroupProfile = "operador" | "tratorista";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const FEW_SHOT_LIMIT = 3;
+
+// Chance de cada mensagem do lote semanal automático buscar novidades reais
+// (ver news.ts) mesmo sem um tema marcado como "busca" — deixa o lote mais
+// dinâmico em vez de repetir sempre os mesmos temas cadastrados. Só se aplica
+// à geração semanal (ver `generateWeek`); geração avulsa/manual continua
+// determinística, só busca quando o tema selecionado está marcado pra isso.
+const WEEKLY_SEARCH_MIX_PROBABILITY = 0.4;
 
 // Teto diário de chamadas ao Gemini (soma o lote semanal automático + gerações
 // avulsas pelo Calendário), pra não estourar a cota do free tier.
@@ -30,11 +38,16 @@ interface GroupRow {
   name: string;
 }
 
-function buildPrompt(profile: GroupProfile, topic: Topic | null, examples: string[]): string {
+function buildPrompt(profile: GroupProfile, topic: Topic | null, examples: string[], newsArticles: NewsArticle[]): string {
   const audience = PROFILE_LABEL[profile];
-  const topicInstruction = topic
-    ? `Tema desta mensagem: "${topic.title}".${topic.description ? ` Detalhes: ${topic.description}` : ""}`
-    : "Escolha livremente um tema relevante de segurança, manutenção ou boas práticas para o dia a dia da equipe.";
+  const topicInstruction =
+    newsArticles.length > 0
+      ? `Escolha UMA das novidades reais abaixo (a mais relevante pro dia a dia de ${audience}) e escreva a mensagem sobre ela, mencionando o fato com naturalidade — sem inventar números ou detalhes que não vieram da notícia:\n${newsArticles
+          .map((a) => `- "${a.title}"${a.description ? ` — ${a.description}` : ""} (fonte: ${a.source})`)
+          .join("\n")}`
+      : topic
+        ? `Tema desta mensagem: "${topic.title}".${topic.description ? ` Detalhes: ${topic.description}` : ""}`
+        : "Escolha livremente um tema relevante de segurança, manutenção ou boas práticas para o dia a dia da equipe.";
 
   const examplesBlock =
     examples.length > 0
@@ -140,7 +153,11 @@ async function fetchFewShotExamples(profile: GroupProfile, groupIds: string[]): 
 // agendada para `scheduledFor`. Seleciona e já marca o tema como usado antes
 // de retornar — chamadas sequenciais (ver `generateWeek`) naturalmente giram
 // entre temas diferentes em vez de repetir o mesmo tema várias vezes.
-async function generateOne(profile: GroupProfile, scheduledFor: Date): Promise<void> {
+async function generateOne(
+  profile: GroupProfile,
+  scheduledFor: Date,
+  options?: { allowRandomSearch?: boolean },
+): Promise<void> {
   const groups = await fetchGroups(profile);
 
   if (groups.length === 0) {
@@ -153,7 +170,11 @@ async function generateOne(profile: GroupProfile, scheduledFor: Date): Promise<v
     profile,
     groups.map((g) => g.id),
   );
-  const prompt = buildPrompt(profile, topic, examples);
+  const wantsNews =
+    topic?.isSearch === true ||
+    (options?.allowRandomSearch === true && Math.random() < WEEKLY_SEARCH_MIX_PROBABILITY);
+  const newsArticles = wantsNews ? await fetchAgroNews(topic?.title) : [];
+  const prompt = buildPrompt(profile, topic, examples, newsArticles);
 
   try {
     const text = await generateText(prompt);
@@ -175,7 +196,14 @@ async function generateOne(profile: GroupProfile, scheduledFor: Date): Promise<v
       }
 
       logger.info(
-        { groupId: group.id, profile, topicId: topic?.id, scheduledFor, fewShotCount: examples.length },
+        {
+          groupId: group.id,
+          profile,
+          topicId: topic?.id,
+          usedNews: newsArticles.length > 0,
+          scheduledFor,
+          fewShotCount: examples.length,
+        },
         "Conteúdo gerado por IA inserido na fila.",
       );
     }
@@ -216,7 +244,7 @@ export async function generateWeek(): Promise<void> {
   targets.sort((a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime());
 
   for (const target of targets) {
-    await generateOne(target.profile, target.scheduledFor);
+    await generateOne(target.profile, target.scheduledFor, { allowRandomSearch: true });
   }
 
   logger.info({ count: targets.length }, "Geração semanal de conteúdo concluída.");
@@ -241,7 +269,8 @@ export async function generateAdHoc(groupId: string, scheduledFor: Date): Promis
 
   const topic = await selectTopic();
   const examples = await fetchFewShotExamples(group.profile, [group.id]);
-  const prompt = buildPrompt(group.profile, topic, examples);
+  const newsArticles = topic?.isSearch === true ? await fetchAgroNews(topic.title) : [];
+  const prompt = buildPrompt(group.profile, topic, examples, newsArticles);
 
   const text = await generateText(prompt);
   const content = { type: "text" as const, text };
@@ -268,7 +297,13 @@ export async function generateAdHoc(groupId: string, scheduledFor: Date): Promis
   }
 
   logger.info(
-    { groupId: group.id, profile: group.profile, topicId: topic?.id, scheduledFor },
+    {
+      groupId: group.id,
+      profile: group.profile,
+      topicId: topic?.id,
+      usedNews: newsArticles.length > 0,
+      scheduledFor,
+    },
     "Geração avulsa inserida na fila.",
   );
 

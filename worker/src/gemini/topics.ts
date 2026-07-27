@@ -5,6 +5,7 @@ export interface Topic {
   id: string;
   title: string;
   description: string | null;
+  isSearch: boolean;
 }
 
 // Prioriza temas marcados como "próximo" pelo instrutor (mais antigo primeiro,
@@ -13,7 +14,7 @@ export interface Topic {
 export async function selectTopic(): Promise<Topic | null> {
   const { data, error } = await supabase
     .from("topics")
-    .select("id, title, description")
+    .select("id, title, description, is_search")
     .order("priority", { ascending: false })
     .order("last_used_at", { ascending: true, nullsFirst: true })
     .limit(1)
@@ -24,7 +25,9 @@ export async function selectTopic(): Promise<Topic | null> {
     return null;
   }
 
-  return data;
+  if (!data) return null;
+
+  return { id: data.id, title: data.title, description: data.description, isSearch: data.is_search };
 }
 
 export async function markTopicUsed(id: string): Promise<void> {

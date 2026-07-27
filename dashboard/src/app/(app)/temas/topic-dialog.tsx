@@ -25,6 +25,7 @@ interface TopicDialogProps {
     title: string;
     description: string | null;
     priority: boolean;
+    isSearch: boolean;
   };
   trigger: React.ReactElement;
 }
@@ -32,6 +33,7 @@ interface TopicDialogProps {
 export function TopicDialog({ mode, topic, trigger }: TopicDialogProps) {
   const [open, setOpen] = useState(false);
   const [priority, setPriority] = useState(topic?.priority ?? false);
+  const [isSearch, setIsSearch] = useState(topic?.isSearch ?? false);
 
   const action = async (_prev: { error?: string }, formData: FormData) =>
     mode === "create" ? createTopic(formData) : updateTopic(topic!.id, formData);
@@ -76,8 +78,24 @@ export function TopicDialog({ mode, topic, trigger }: TopicDialogProps) {
               name="description"
               rows={3}
               defaultValue={topic?.description ?? ""}
-              placeholder="Contexto extra para a IA usar ao gerar o conteúdo"
+              placeholder={
+                isSearch
+                  ? "Foco da busca, ex: máquinas agrícolas, safra, clima, mercado — Brasil"
+                  : "Contexto extra para a IA usar ao gerar o conteúdo"
+              }
             />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="is_search"
+              checked={isSearch}
+              onCheckedChange={(checked) => setIsSearch(checked === true)}
+            />
+            <input type="hidden" name="is_search" value={isSearch ? "on" : "off"} />
+            <Label htmlFor="is_search" className="font-normal">
+              Buscar novidades atuais (usa o Google Search do Gemini em vez de um tema fixo)
+            </Label>
           </div>
 
           <div className="flex items-center gap-2">
