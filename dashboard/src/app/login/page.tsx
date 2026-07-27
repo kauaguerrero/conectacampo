@@ -1,9 +1,12 @@
-import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Sparkles, Trophy, Vote } from "lucide-react";
+import { LoginFormCard } from "@/components/login-form-card";
 import { login } from "./actions";
+
+const FEATURES = [
+  { icon: Sparkles, label: "Conteúdo gerado por IA" },
+  { icon: Vote, label: "Enquetes automáticas" },
+  { icon: Trophy, label: "Reconhecimento da equipe" },
+];
 
 export default async function LoginPage({
   searchParams,
@@ -13,36 +16,44 @@ export default async function LoginPage({
   const { error } = await searchParams;
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-gradient-to-br from-[oklch(0.29_0.055_150)] via-[oklch(0.34_0.06_150)] to-[oklch(0.42_0.09_148)] p-4">
-      <Card className="w-full max-w-sm shadow-2xl">
-        <CardHeader className="items-center text-center">
-          <Image
-            src="/cclogoescrito-icon.png"
-            alt="Conecta Campo"
-            width={220}
-            height={146}
-            priority
-            className="h-auto w-44"
-          />
-          <CardDescription>Alta Mogiana — painel do instrutor</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={login} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input id="email" name="email" type="email" required autoComplete="email" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input id="password" name="password" type="password" required autoComplete="current-password" />
-            </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <Button type="submit" className="w-full">
-              Entrar
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="grid min-h-svh lg:grid-cols-[1.1fr_1fr]">
+      <div className="relative isolate flex h-56 flex-col justify-end overflow-hidden p-8 sm:h-72 lg:h-auto lg:justify-between lg:p-12">
+        <div
+          className="absolute inset-0 -z-10 bg-cover"
+          style={{ backgroundImage: "url('/headerimage.png')", backgroundPosition: "center 65%" }}
+        />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[oklch(0.22_0.045_150/_0.92)] via-[oklch(0.24_0.05_150/_0.55)] to-[oklch(0.3_0.06_150/_0.15)] lg:bg-gradient-to-r lg:from-[oklch(0.22_0.045_150/_0.9)] lg:via-[oklch(0.24_0.05_150/_0.45)] lg:to-transparent" />
+
+        <span className="hidden text-lg font-bold tracking-tight text-white drop-shadow-sm lg:inline">
+          Conecta Campo
+        </span>
+
+        <div className="flex flex-col gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-white drop-shadow-sm sm:text-3xl">
+              Comunidade WhatsApp da Alta Mogiana
+            </h1>
+            <p className="mt-1.5 max-w-md text-sm text-white/85 drop-shadow-sm sm:text-base">
+              Conteúdo, enquetes e reconhecimento pra equipe de campo — tudo em um só lugar.
+            </p>
+          </div>
+          <div className="hidden flex-wrap gap-2 sm:flex">
+            {FEATURES.map(({ icon: Icon, label }) => (
+              <span
+                key={label}
+                className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white/90 ring-1 ring-white/20 backdrop-blur-sm"
+              >
+                <Icon className="size-3.5" />
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-1 items-center justify-center bg-background p-6">
+        <LoginFormCard error={error} action={login} />
+      </div>
     </div>
   );
 }
