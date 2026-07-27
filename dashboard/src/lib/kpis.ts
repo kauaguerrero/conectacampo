@@ -99,14 +99,14 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
   const since90 = new Date(now.getTime() - 90 * DAY_MS).toISOString();
 
   const [
-    { data: groupsData },
-    { data: membersData },
-    { data: sentPostsData },
-    { data: attemptedQueueData },
-    { data: aiDecidedData },
-    { data: eventsData },
-    { data: recognitionsData },
-    { data: queuedData, count: queuedCount },
+    { data: groupsData, error: groupsError },
+    { data: membersData, error: membersError },
+    { data: sentPostsData, error: sentPostsError },
+    { data: attemptedQueueData, error: attemptedQueueError },
+    { data: aiDecidedData, error: aiDecidedError },
+    { data: eventsData, error: eventsError },
+    { data: recognitionsData, error: recognitionsError },
+    { data: queuedData, count: queuedCount, error: queuedError },
   ] = await Promise.all([
     supabase.from("groups").select("id, name, profile"),
     supabase.from("members").select("id, group_id, name, active, birthday_date, created_at"),
@@ -139,6 +139,19 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
       .order("scheduled_for", { ascending: true })
       .limit(5),
   ]);
+
+  for (const [label, error] of Object.entries({
+    groups: groupsError,
+    members: membersError,
+    sentPosts: sentPostsError,
+    attemptedQueue: attemptedQueueError,
+    aiDecided: aiDecidedError,
+    events: eventsError,
+    recognitions: recognitionsError,
+    queued: queuedError,
+  })) {
+    if (error) console.error(`getDashboardKpis: falha ao consultar "${label}":`, error);
+  }
 
   const groups = (groupsData ?? []) as GroupRow[];
   const members = (membersData ?? []) as MemberRow[];
