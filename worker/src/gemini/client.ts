@@ -13,12 +13,21 @@ function getClient(): GoogleGenAI {
   return client;
 }
 
-export async function generateText(prompt: string): Promise<string> {
+export interface InlineDocument {
+  base64: string;
+  mimeType: string;
+}
+
+export async function generateText(prompt: string, document?: InlineDocument): Promise<string> {
   const ai = getClient();
+
+  const contents = document
+    ? [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: document.mimeType, data: document.base64 } }] }]
+    : prompt;
 
   const response = await ai.models.generateContent({
     model: config.geminiModel,
-    contents: prompt,
+    contents,
   });
 
   const text = response.text?.trim();

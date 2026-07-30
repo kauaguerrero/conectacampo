@@ -4,6 +4,7 @@ import {
   Bell,
   Calendar,
   ClipboardCheck,
+  FileText,
   LayoutDashboard,
   LayoutTemplate,
   Lightbulb,
@@ -58,6 +59,7 @@ const sections = [
       { title: "Calendário", url: "/calendario", icon: Calendar },
       { title: "Templates", url: "/templates", icon: LayoutTemplate },
       { title: "Temas", url: "/temas", icon: Lightbulb },
+      { title: "Documentos", url: "/documentos", icon: FileText },
     ],
   },
   {

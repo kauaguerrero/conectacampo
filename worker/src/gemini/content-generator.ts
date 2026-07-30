@@ -1,6 +1,7 @@
 import { logger } from "../logger.js";
 import { supabase } from "../supabase.js";
 import { generateText } from "./client.js";
+import { findRelevantDocument, type RelevantDocument } from "./document-context.js";
 import { EQUIPMENT_CONTEXT } from "./equipment-context.js";
 import { fetchAgroNews, type NewsArticle } from "./news.js";
 import { markTopicUsed, selectTopic, type Topic } from "./topics.js";
@@ -38,7 +39,13 @@ interface GroupRow {
   name: string;
 }
 
-function buildPrompt(profile: GroupProfile, topic: Topic | null, examples: string[], newsArticles: NewsArticle[]): string {
+function buildPrompt(
+  profile: GroupProfile,
+  topic: Topic | null,
+  examples: string[],
+  newsArticles: NewsArticle[],
+  hasDocument: boolean,
+): string {
   const audience = PROFILE_LABEL[profile];
   const topicInstruction =
     newsArticles.length > 0
@@ -48,6 +55,10 @@ function buildPrompt(profile: GroupProfile, topic: Topic | null, examples: strin
       : topic
         ? `Tema desta mensagem: "${topic.title}".${topic.description ? ` Detalhes: ${topic.description}` : ""}`
         : "Escolha livremente um tema relevante de segurança, manutenção ou boas práticas para o dia a dia da equipe.";
+
+  const documentInstruction = hasDocument
+    ? "\nUm manual técnico real do equipamento desta mensagem foi anexado a esta conversa — use informações reais de lá (procedimentos, especificações, avisos) quando fizer sentido pro tema, sem inventar dados que não estejam no documento.\n"
+    : "";
 
   const examplesBlock =
     examples.length > 0
@@ -64,6 +75,7 @@ voltadas a ${audience}.
 ${EQUIPMENT_CONTEXT}
 
 ${topicInstruction}
+${documentInstruction}
 ${examplesBlock}
 Formato da mensagem (siga essa estrutura, com quebras de linha reais entre as partes):
 1. Uma linha de abertura curta e chamativa, com *negrito* (um asterisco de cada lado) e 1 emoji relevante ao tema (⚠️ segurança, 🔧 manutenção, 🌱 boas práticas, 🚜 operação) — nunca use # ou outro markdown.
@@ -149,6 +161,14 @@ async function fetchFewShotExamples(profile: GroupProfile, groupIds: string[]): 
   return ((data ?? []) as FewShotRow[]).map((row) => row.content?.text).filter((text): text is string => Boolean(text));
 }
 
+// Temas de busca (`isSearch`) são sobre novidades atuais, não sobre um
+// equipamento específico — não faz sentido tentar casar um manual técnico
+// nesse caso.
+async function resolveDocument(topic: Topic | null): Promise<RelevantDocument | null> {
+  if (!topic || topic.isSearch) return null;
+  return findRelevantDocument(`${topic.title} ${topic.description ?? ""}`);
+}
+
 // Gera UMA mensagem e enfileira uma cópia dela pra cada grupo do `profile`,
 // agendada para `scheduledFor`. Seleciona e já marca o tema como usado antes
 // de retornar — chamadas sequenciais (ver `generateWeek`) naturalmente giram
@@ -174,10 +194,11 @@ async function generateOne(
     topic?.isSearch === true ||
     (options?.allowRandomSearch === true && Math.random() < WEEKLY_SEARCH_MIX_PROBABILITY);
   const newsArticles = wantsNews ? await fetchAgroNews(topic?.title) : [];
-  const prompt = buildPrompt(profile, topic, examples, newsArticles);
+  const document = await resolveDocument(topic);
+  const prompt = buildPrompt(profile, topic, examples, newsArticles, document !== null);
 
   try {
-    const text = await generateText(prompt);
+    const text = await generateText(prompt, document ?? undefined);
     const content = { type: "text" as const, text };
 
     for (const group of groups) {
@@ -270,9 +291,10 @@ export async function generateAdHoc(groupId: string, scheduledFor: Date): Promis
   const topic = await selectTopic();
   const examples = await fetchFewShotExamples(group.profile, [group.id]);
   const newsArticles = topic?.isSearch === true ? await fetchAgroNews(topic.title) : [];
-  const prompt = buildPrompt(group.profile, topic, examples, newsArticles);
+  const document = await resolveDocument(topic);
+  const prompt = buildPrompt(group.profile, topic, examples, newsArticles, document !== null);
 
-  const text = await generateText(prompt);
+  const text = await generateText(prompt, document ?? undefined);
   const content = { type: "text" as const, text };
 
   const { data, error } = await supabase

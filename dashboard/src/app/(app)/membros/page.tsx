@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { FileSpreadsheet, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { ActiveToggle } from "./active-toggle";
 import { DeleteMemberButton } from "./delete-member-button";
+import { ImportMembersDialog } from "./import-members-dialog";
 import { MemberDialog } from "./member-dialog";
 
 interface MemberRow {
@@ -50,21 +51,31 @@ export default async function MembrosPage() {
         title="Membros"
         subtitle="Cadastro de operadores e tratoristas por grupo."
         action={
-          <MemberDialog
-            mode="create"
-            groups={groups ?? []}
-            trigger={
-              <Button disabled={!groups || groups.length === 0}>
-                <Plus /> Novo membro
-              </Button>
-            }
-          />
+          <div className="flex flex-wrap gap-2">
+            <ImportMembersDialog
+              trigger={
+                <Button variant="outline" disabled={!groups || groups.length === 0}>
+                  <FileSpreadsheet className="text-[#1D6F42]" /> Importar Membros Excel
+                </Button>
+              }
+            />
+            <MemberDialog
+              mode="create"
+              groups={groups ?? []}
+              trigger={
+                <Button disabled={!groups || groups.length === 0}>
+                  <Plus /> Novo membro
+                </Button>
+              }
+            />
+          </div>
         }
       />
 
       {!groups || groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nenhum grupo cadastrado ainda. Cadastre um grupo direto no banco antes de adicionar membros.
+          Nenhum grupo configurado ainda. Vá em Configurações e vincule os grupos do WhatsApp (Operadores e
+          Tratoristas) antes de adicionar membros.
         </p>
       ) : null}
 

@@ -233,6 +233,45 @@ async function handleWhatsAppGroups(_req: http.IncomingMessage, res: http.Server
   }
 }
 
+interface GroupsParticipantsBody {
+  ids?: unknown;
+}
+
+async function handleGroupsParticipants(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const sock = getSocket();
+
+  if (!sock || connectionState.status !== "open") {
+    sendJson(res, 409, { error: "WhatsApp não está conectado." });
+    return;
+  }
+
+  let body: GroupsParticipantsBody;
+  try {
+    body = ((await readJsonBody(req)) ?? {}) as GroupsParticipantsBody;
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : "JSON inválido." });
+    return;
+  }
+
+  if (!Array.isArray(body.ids) || body.ids.some((id) => typeof id !== "string")) {
+    sendJson(res, 400, { error: "ids deve ser uma lista de IDs de grupo." });
+    return;
+  }
+
+  try {
+    const groups = await sock.groupFetchAllParticipating();
+    const participants: Record<string, string[]> = {};
+    for (const id of body.ids as string[]) {
+      const group = groups[id];
+      participants[id] = group ? group.participants.map((p) => p.id.split("@")[0].split(":")[0]) : [];
+    }
+    sendJson(res, 200, { participants });
+  } catch (err) {
+    logger.error({ err }, "Falha ao listar participantes dos grupos.");
+    sendJson(res, 500, { error: "Falha ao listar participantes dos grupos." });
+  }
+}
+
 async function handleGenerationLimit(_req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const count = await countTodayGenerations();
   sendJson(res, 200, { count, limit: DAILY_GENERATION_LIMIT });
@@ -337,6 +376,11 @@ export function startServer(): void {
 
       if (req.method === "GET" && req.url === "/whatsapp/groups") {
         await handleWhatsAppGroups(req, res);
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/whatsapp/groups/participants") {
+        await handleGroupsParticipants(req, res);
         return;
       }
 
