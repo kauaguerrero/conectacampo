@@ -26,6 +26,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 function LinkedInIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -74,6 +75,7 @@ const sections = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   return (
     <Sidebar collapsible="icon">
@@ -105,6 +107,7 @@ export function AppSidebar() {
                         render={<Link href={item.url} />}
                         isActive={active}
                         tooltip={item.title}
+                        onClick={() => isMobile && setOpenMobile(false)}
                         className={
                           active
                             ? "bg-sidebar-accent font-semibold text-sidebar-primary data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-primary"
