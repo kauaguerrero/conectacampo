@@ -32,7 +32,7 @@ export const connectionState: {
   hadQr: boolean;
   user: ConnectedUser | null;
 } = {
-  status: "connecting",
+  status: "close",
   qr: null,
   qrImage: null,
   hadQr: false,
@@ -149,8 +149,18 @@ async function connect(): Promise<void> {
   });
 }
 
+// Chamado no boot do worker — só reabre a conexão sozinho se já existir uma
+// sessão pareada salva (sobrevive a redeploys/reinícios via volume). Sem
+// sessão salva, fica parado em "close" esperando o clique em "Conectar" no
+// dashboard: tentar parear sozinho a cada boot gastava tentativas contra o
+// rate-limit de pareamento do WhatsApp sem nenhum QR pra escanear.
 export async function startWhatsApp(): Promise<void> {
-  await connect();
+  const { state } = await useMultiFileAuthState(config.authStatePath);
+  if (state.creds.registered) {
+    await connect();
+  } else {
+    logger.info('Nenhuma sessão do WhatsApp salva — aguardando clique em "Conectar" no dashboard.');
+  }
 }
 
 // Chamado pelo endpoint POST /whatsapp/connect — reconecta do zero (gera QR

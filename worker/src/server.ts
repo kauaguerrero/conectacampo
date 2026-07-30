@@ -290,8 +290,11 @@ export function startServer(): void {
   const server = http.createServer((req, res) => {
     void (async () => {
       if (req.method === "GET" && req.url === "/health") {
-        const healthy = connectionState.status === "open";
-        sendJson(res, healthy ? 200 : 503, {
+        // Só atesta que o processo/servidor HTTP está de pé — não depende do
+        // WhatsApp estar conectado, senão o Fly derruba o roteamento pra
+        // máquina inteira (fila, geração de IA, etc.) toda vez que a sessão
+        // do WhatsApp cai ou está reconectando.
+        sendJson(res, 200, {
           status: connectionState.status,
           lastError: connectionState.lastError ?? null,
         });
