@@ -1,4 +1,4 @@
-import { jidNormalizedUser } from "@whiskeysockets/baileys";
+import { getKeyAuthor, jidNormalizedUser } from "@whiskeysockets/baileys";
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import { logger } from "./logger.js";
 import { decodePollVote } from "./polls.js";
@@ -198,7 +198,11 @@ export function registerEngagementListeners(sock: WASocket): void {
 
     for (const msg of messages) {
       const jid = msg.key.remoteJid;
-      const senderJid = msg.key.participant ?? msg.key.remoteJid;
+      // getKeyAuthor prioriza participantAlt (o par em formato de telefone)
+      // sobre participant, que em grupos já migrados pro sistema LID vem
+      // como identificador opaco @lid — sem isso, jidToDigits() extrairia o
+      // número errado e o membro nunca bateria com o cadastro.
+      const senderJid = getKeyAuthor(msg.key, meId) || undefined;
 
       if (!jid?.endsWith("@g.us") || msg.key.fromMe || !senderJid) {
         continue;
@@ -235,7 +239,7 @@ export function registerEngagementListeners(sock: WASocket): void {
   sock.ev.on("messages.reaction", (reactions) => {
     for (const { reaction } of reactions) {
       const jid = reaction.key?.remoteJid;
-      const senderJid = reaction.key?.participant ?? reaction.key?.remoteJid;
+      const senderJid = reaction.key ? getKeyAuthor(reaction.key) || undefined : undefined;
 
       if (!jid?.endsWith("@g.us") || reaction.key?.fromMe || !senderJid) {
         continue;

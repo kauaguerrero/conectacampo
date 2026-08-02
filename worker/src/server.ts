@@ -5,7 +5,7 @@ import { config } from "./config.js";
 import { countTodayGenerations, generateAdHoc, DAILY_GENERATION_LIMIT } from "./gemini/content-generator.js";
 import { logger } from "./logger.js";
 import { supabase } from "./supabase.js";
-import { connectionState, getSocket, logoutAndClearSession, reconnectWhatsApp } from "./whatsapp.js";
+import { ConnectCooldownError, connectionState, getSocket, logoutAndClearSession, reconnectWhatsApp } from "./whatsapp.js";
 
 function isAuthorized(req: http.IncomingMessage): boolean {
   const header = req.headers.authorization ?? "";
@@ -209,7 +209,15 @@ async function handleWhatsAppLogout(_req: http.IncomingMessage, res: http.Server
 }
 
 async function handleWhatsAppConnect(_req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-  await reconnectWhatsApp();
+  try {
+    await reconnectWhatsApp();
+  } catch (err) {
+    if (err instanceof ConnectCooldownError) {
+      sendJson(res, 429, { error: err.message });
+      return;
+    }
+    throw err;
+  }
   sendJson(res, 200, { status: connectionState.status });
 }
 
@@ -263,7 +271,11 @@ async function handleGroupsParticipants(req: http.IncomingMessage, res: http.Ser
     const participants: Record<string, string[]> = {};
     for (const id of body.ids as string[]) {
       const group = groups[id];
-      participants[id] = group ? group.participants.map((p) => p.id.split("@")[0].split(":")[0]) : [];
+      // Prefere phoneNumber ao id: em grupos migrados pro sistema LID, o id
+      // vem como identificador opaco @lid em vez do JID de telefone.
+      participants[id] = group
+        ? group.participants.map((p) => (p.phoneNumber ?? p.id).split("@")[0].split(":")[0])
+        : [];
     }
     sendJson(res, 200, { participants });
   } catch (err) {

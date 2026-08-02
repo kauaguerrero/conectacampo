@@ -25,7 +25,7 @@
     "@google/genai": "^2.13.0",
     "@hapi/boom": "^9.1.4",
     "@supabase/supabase-js": "^2.110.8",
-    "@whiskeysockets/baileys": "6.17.16",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "dotenv": "^17.4.2",
     "node-cron": "^4.6.0",
     "pino": "^10.3.1",

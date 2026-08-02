@@ -46,6 +46,24 @@ let currentSock: WASocket | undefined;
 // reconectar sozinho logo depois de um logout de propósito.
 let awaitingManualConnect = false;
 
+// Cooldown entre tentativas manuais de conexão (via /whatsapp/connect). Sem
+// isso, um cliente clicando "Conectar" repetidamente enquanto o WhatsApp
+// rejeita o pareamento (ex.: 401 antes de sequer gerar QR) gera uma rajada de
+// tentativas em segundos — o que piora um bloqueio temporário do lado do
+// WhatsApp em vez de esperar ele passar.
+const RECONNECT_COOLDOWN_MS = 30_000;
+let nextConnectAllowedAt = 0;
+
+export class ConnectCooldownError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterMs: number) {
+    const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
+    super(`Aguarde ${retryAfterSeconds}s antes de tentar conectar de novo.`);
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 export function getSocket(): WASocket | undefined {
   return currentSock;
 }
@@ -55,9 +73,15 @@ export function getSocket(): WASocket | undefined {
 // os eventos que a gente realmente quer ver (conectado, QR, erro).
 const baileysLogger = pino({ level: "warn" });
 
+// Limpa só o conteúdo de auth_state, sem remover o diretório em si: em
+// produção ele é o mount point de um volume do Fly.io, e um rmdir nele
+// falha com EBUSY (device busy) por ser a raiz de um filesystem montado.
 async function clearAuthState(): Promise<void> {
-  await fs.rm(config.authStatePath, { recursive: true, force: true });
   await fs.mkdir(config.authStatePath, { recursive: true });
+  const entries = await fs.readdir(config.authStatePath);
+  await Promise.all(
+    entries.map((entry) => fs.rm(`${config.authStatePath}/${entry}`, { recursive: true, force: true })),
+  );
 }
 
 async function connect(): Promise<void> {
@@ -170,6 +194,13 @@ export async function reconnectWhatsApp(): Promise<void> {
   if (currentSock) {
     return;
   }
+
+  const now = Date.now();
+  if (now < nextConnectAllowedAt) {
+    throw new ConnectCooldownError(nextConnectAllowedAt - now);
+  }
+  nextConnectAllowedAt = now + RECONNECT_COOLDOWN_MS;
+
   await connect();
 }
 
